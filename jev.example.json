@@ -1,0 +1,39 @@
+{
+  "points": {
+    "tool.risk": "shadow",
+    "tool.approval": "off"
+  },
+  "tiers": ["jev"],
+  "routes": {},
+  "judges": {
+    "relay": {
+      "type": "typesafe",
+      "baseUrl": "https://relay.example.com/v1/systemone",
+      "model": "jev-1.13",
+      "apiKeyEnv": "RELAY_KEY"
+    },
+    "lab": {
+      "type": "http",
+      "baseUrl": "http://10.0.0.5:9000/evaluate",
+      "timeoutMs": 2000
+    },
+    "fast": {
+      "type": "llm",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model": "qwen-plus",
+      "apiKeyEnv": "DASHSCOPE_API_KEY",
+      "timeoutMs": 4000
+    }
+  },
+  "thresholds": {
+    "yes": 0.85,
+    "no": 0.15,
+    "minProbability": 0.6,
+    "risk": 0.85
+  },
+  "approvalTools": ["execute_shell_command", "run_command"],
+  "skipTools": ["jev_ask", "jev_ledger"],
+  "timeoutMs": 4000,
+  "recordState": false,
+  "stateChars": 4000
+}

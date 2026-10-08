@@ -1,0 +1,33 @@
+# Private kernel config — never commit. The repo ships jev.example.json only;
+# your real config (judge endpoints, tiers, modes) belongs in the installed
+# plugin's data dir (<host>/plugin-data/jev-kernel/jev.json) or next to
+# plugin.json in the installed plugin directory.
+jev.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Environments
+.venv/
+.env
+
+# Build artifacts
+dist/
+build/
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Agent / editor state
+.qoder/
+.DS_Store
+
+# Ledger and logs, if you point the plugin at this checkout
+logs/
+*.jsonl
