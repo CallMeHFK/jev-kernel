@@ -18,6 +18,10 @@ read the ledger before handing a point to a judge. A port of
 verified against mu-agent 0.1.8. Stdlib-only, no pip dependencies, no
 telemetry.
 
+The same kernel also runs as a **PreToolUse hook** in other agent hosts —
+ZCode, Qoder, Claude Code and Codex share one verdict dialect — see
+[Other agent hosts](#other-agent-hosts-pretooluse-hook-mode).
+
 Defaults are inert: `tool.risk` starts in `shadow`, `tool.approval` in `off`,
 and `tiers` empty — **no judge is contacted until you configure one**. See
 [Quick start](#quick-start).
@@ -31,6 +35,7 @@ qwenpaw plugin install ~/.qwenpaw/plugins/jev-kernel   # or a local checkout / r
 
 - [Why](#why)
 - [Quick start](#quick-start) — install · configure · read the ledger · go active
+- [Other agent hosts](#other-agent-hosts-pretooluse-hook-mode) — ZCode · Qoder · Claude Code · Codex
 - [How it works](#how-it-works) — decision points, three modes, the cascade, thresholds
 - [Judges and transports](#judges-and-transports) — `typesafe` · `http` · `llm` · `systemone` · built-in `jev`/`session` tiers
 - [Configuration](#configuration) — `jev.json`
@@ -89,6 +94,62 @@ ever asked a bounded question with a number attached.
    `"points": { "tool.risk": "active" }`. From then on a confident `yes` on
    `tool.risk` denies the call, and `tool.approval` escalates to the human
    instead of running.
+
+## Other agent hosts (PreToolUse hook mode)
+
+ZCode, Qoder, Claude Code and Codex all expose the tool seam as a
+`PreToolUse` hook: the host pipes one JSON event to a command's stdin and
+reads the verdict off stdout. All four read the same envelope —
+`{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision":
+"allow|deny|ask", "permissionDecisionReason": …}}` (Codex additionally
+honours a top-level `{"decision": "block", "reason": …}`, which the hook
+emits for denials) — verified against the qodercli 1.1.64 binary, ZCode's
+app.asar, and codex 0.159.2's wire schema. `backend/hook.py` is that command:
+
+```bash
+python3 scripts/install_hook.py --host zcode    # or: qoder | claude | codex
+```
+
+The installer gives each host a **self-contained copy in its own
+dot-folder** — `~/.zcode/jev-kernel/`, `~/.qoder-cn/jev-kernel/`,
+`~/.claude/jev-kernel/`, `~/.codex/jev-kernel/` — holding `backend/`,
+`jev.json` and `ledger.jsonl` together (nothing rebuilds those folders, so
+the dev repo can move or be deleted afterwards; QwenPaw's own install path
+`~/.qwenpaw/plugins/jev-kernel/` already works this way). It merges one hook
+entry into the host's hook config (`~/.zcode/hooks.json`,
+`~/.qoder-cn/settings.json`, `~/.claude/settings.json`,
+`~/.codex/hooks.json`), preserves hooks already there, backs the file up to
+`<path>.jev-bak`, and is idempotent — re-running it is also the upgrade path
+(re-deploys the code, rewrites a drifted command). `--uninstall` removes only
+jev-kernel's hook entry and keeps the deployed folder (it holds the ledger);
+`--dry-run` prints without writing. ZCode asks you to trust new hooks on
+first run (`workspace_hooks_execute_code`) — approve it there.
+
+**Native plugin format (zcode pilot).** All four hosts cloned the same
+claude-derived plugin store (`~/.<host>/plugins/`, `.<host>-plugin/plugin.json`
+manifest, `enabledPlugins` gating). `--format plugin` turns the deploy dir
+into that package — `.zcode-plugin/plugin.json` + `hooks/hooks.json` inside
+`~/.zcode/jev-kernel/` — and registers it via `plugins.dirs` +
+`enabledPlugins["jev-kernel@inline"]` in `~/.zcode/cli/config.json`, removing
+the legacy manual hook entry so the call is judged once. Verified for zcode
+only so far; the other hosts stay on `--format hook` until piloted. Note:
+ZCode has no `${PLUGIN_ROOT}`-style variable in hook commands, so the
+packaged hooks.json carries absolute paths — fine for local installs, a
+known limitation for marketplace distribution.
+
+Hook mode differences from the QwenPaw plugin:
+
+- Config and ledger are per host: `<host folder>/jev-kernel/jev.json` and
+  `ledger.jsonl`. `$JEV_KERNEL_CONFIG` / `$JEV_KERNEL_DATA_DIR` still
+  override; a first install seeds `jev.json` from a legacy shared
+  `~/.jev-kernel/jev.json` if one exists.
+- The `session` tier is QwenPaw-only — elsewhere it resolves to nothing and
+  the cascade records `unresolved:session`. Use named judges or `jev`.
+- `tool.approval` in `active` mode maps to `permissionDecision: "ask"`, i.e.
+  the host's own human confirmation flow, instead of a denied tool response.
+- Empty stdout means "no opinion": shadow mode, fallback verdicts, skipTools
+  and every error path all exit 0 silently, so a dead kernel never blocks a
+  tool call.
 
 ## How it works
 
@@ -180,15 +241,18 @@ point — read it before you flip a point to `active`.
 ## Does it work?
 
 ```bash
-python -m unittest discover -s tests -v   # 14 tests, bare interpreter
+python -m unittest discover -s tests -v   # 43 tests, bare interpreter
 python packaging/build_plugin_zip.py      # dist/jev-kernel.zip
 ```
 
 The suite covers the wire shapes, uncertainty margins, cascade fall-through,
 all four transports (against a local stub server speaking each dialect,
 including ollama's raw System One), dead-judge fallback, active denial,
-shadow pass-through, approval escalation, session-tier model inheritance, and
-publish hygiene. A shadow-mode session against a local `clef-flash` judged
+shadow pass-through, approval escalation, session-tier model inheritance,
+publish hygiene, and the hook front end: each host's payload spelling and
+verdict dialect, ZCode's strict-schema key set, and fail-open on garbage
+stdin — including the installed invocation shape (`python3 backend/hook.py
+--host …`) run as a real subprocess. A shadow-mode session against a local `clef-flash` judged
 `get_current_time` at `P(yes)=0.016` and a self-created scratch-dir cleanup at
 `P(no)=0.99`, while probes of `rm -rf ~/Documents` and `git push --force`
 scored `0.96` and `0.89` — the calibration curve is the artefact to check in

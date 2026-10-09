@@ -79,24 +79,10 @@ for _mod_name in list(_sys.modules):
         except Exception:  # noqa: BLE001 - unreadable stale module: drop it
             del _sys.modules[_mod_name]
 
-from . import judges, ledger, tools
-from .config import load_config, num, point_mode, plugin_data_dir
-from .questions import Question
+from . import decide, tools
+from .config import load_config, point_mode, plugin_data_dir
 
 logger = logging.getLogger("jev_kernel.qwenpaw")
-
-RISK_QUESTION = (
-    "Given the state, will this tool call perform a destructive or "
-    "irreversible operation on user data or system state: deleting or "
-    "overwriting content the user did not ask to replace, sending data "
-    "outside this machine, spending money, or changing permissions or "
-    "system configuration?"
-)
-
-APPROVAL_QUESTION = (
-    "Given the state, should this exact tool call run right now without "
-    "asking the human for confirmation first?"
-)
 
 
 class JevKernelMiddleware(MiddlewareBase):
@@ -106,96 +92,12 @@ class JevKernelMiddleware(MiddlewareBase):
         self._ws = str(workspace_dir or "")
         self._agent_config = agent_config
 
-    # -- helpers ---------------------------------------------------------
-
-    def _state_for(self, tool_name: str, raw_input: Any, cfg: dict[str, Any]) -> dict[str, Any]:
-        chars = int(cfg.get("stateChars") or 4000)
-        blob = raw_input if isinstance(raw_input, str) else str(raw_input)
-        if len(blob) > chars:
-            blob = blob[:chars] + " …[truncated]"
-        return {"tool": tool_name, "input": blob, "workspace": self._ws}
-
-    def _record(
-        self,
-        point: str,
-        mode: str,
-        tool_name: str,
-        state: dict[str, Any],
-        question: Question,
-        verdict: Any,
-        enforced: bool,
-        cfg: dict[str, Any],
-    ) -> None:
-        record: dict[str, Any] = {
-            "point": point,
-            "mode": mode,
-            "tool": tool_name,
-            "question": question.as_dict(),
-            "verdict": verdict.as_dict(),
-            "enforced": enforced,
-            "workspace": self._ws,
-        }
-        if cfg.get("recordState"):
-            record["state"] = state
-        ledger.append(record)
-
     def _deny(self, text: str, tool_name: str) -> ToolResponse:
         logger.info("jev-kernel: denied %s (%s)", tool_name, text[:80])
         return ToolResponse(
             content=[TextBlock(type="text", text=text)],
             state=ToolResultState.DENIED,
         )
-
-    # -- decision points ---------------------------------------------------
-
-    async def _judge(self, cfg: dict[str, Any], tool_name: str, raw_input: Any) -> str | None:
-        thresholds = cfg.get("thresholds") or {}
-        state = self._state_for(tool_name, raw_input, cfg)
-
-        mode = point_mode(cfg, "tool.risk")
-        if mode != "off":
-            question = Question("tool.risk", "noul", RISK_QUESTION)
-            verdict = await judges.ask_one("tool.risk", state, question, self._agent_config)
-            risky = (
-                not verdict.fallback
-                and verdict.value is True
-                and verdict.probability >= num(thresholds.get("risk"), 0.85)
-            )
-            self._record("tool.risk", mode, tool_name, state, question, verdict,
-                         bool(risky and mode == "active"), cfg)
-            if mode == "active" and risky:
-                return (
-                    f"jev-kernel: decision point tool.risk judged this call "
-                    f"destructive or irreversible (P(yes)="
-                    f"{verdict.probability:.2f}, judge={verdict.judge}, "
-                    f"{verdict.latency_ms:.0f}ms). Ask the user for explicit "
-                    f"confirmation of exactly this action before retrying, "
-                    f"or set points[\"tool.risk\"] to \"shadow\" in jev.json."
-                )
-
-        if tool_name in set(cfg.get("approvalTools") or []):
-            mode = point_mode(cfg, "tool.approval")
-            if mode != "off":
-                question = Question("tool.approval", "noul", APPROVAL_QUESTION)
-                verdict = await judges.ask_one("tool.approval", state, question, self._agent_config)
-                approved = (
-                    not verdict.fallback
-                    and verdict.value is True
-                    and verdict.probability >= num(thresholds.get("yes"), 0.85)
-                )
-                self._record("tool.approval", mode, tool_name, state, question,
-                             verdict, bool(not approved and mode == "active"), cfg)
-                if mode == "active" and not approved:
-                    return (
-                        f"jev-kernel: decision point tool.approval did not "
-                        f"auto-approve this call (verdict="
-                        f"{verdict.as_dict()['value']}, P="
-                        f"{verdict.probability:.2f}, judge="
-                        f"{verdict.judge or 'none'}). Present the exact "
-                        f"command to the user and wait for confirmation "
-                        f"before retrying."
-                    )
-        return None
 
     # -- hook ---------------------------------------------------------------
 
@@ -212,9 +114,12 @@ class JevKernelMiddleware(MiddlewareBase):
         try:
             cfg = load_config()
             if name not in set(cfg.get("skipTools") or []):
-                denial = await self._judge(cfg, name, raw_input)
-                if denial is not None:
-                    yield self._deny(denial, name)
+                decision = await decide.judge_tool_call(
+                    cfg, name, raw_input, workspace=self._ws,
+                    host="qwenpaw", agent_config=self._agent_config,
+                )
+                if decision is not None:
+                    yield self._deny(decision.message, name)
                     return
         except Exception:  # noqa: BLE001 - the kernel must never abort the agent loop
             logger.exception("jev-kernel: judgment failed for %s; failing open", name)

@@ -14,6 +14,32 @@ two points, three modes. `active` may deny or escalate; `shadow` ledger-only;
 `off` skips. Defaults are inert on purpose — a fresh install must not contact
 any judge and must not change any behaviour until the operator opts in.
 
+## Two front ends, one judgment
+
+Hook-based hosts (ZCode, Qoder, Claude Code, Codex) expose the same seam as
+a `PreToolUse` command hook instead of middleware: one JSON event on stdin,
+one verdict on stdout. The judgment — both questions, thresholds, the ledger
+write — lives once in `backend/decide.py`; `backend/main.py` (middleware) and
+`backend/hook.py` (CLI) only differ in how a `Decision` is delivered, as a
+denied ToolResponse or as the host's verdict JSON. The four hosts turn out to
+share one verdict dialect (`hookSpecificOutput.permissionDecision` ∈
+allow/deny/ask + reason, empty stdout = no opinion), verified against the
+qodercli 1.1.64 binary, ZCode's app.asar and codex 0.159.2's wire schema; the
+only per-host variation is Codex's extra top-level `{"decision": "block"}` for
+denials and ZCode's strict validator, which silently discards any document
+carrying a key it does not know — so the hook emits exactly the schema keys
+and nothing else. `tool.approval` in `active` mode maps to `ask` (the host's
+own human confirmation) rather than a denial. Each hook host gets a
+self-contained copy in its own dot-folder (`~/.zcode/jev-kernel/`,
+`~/.claude/jev-kernel/`, …): `backend/`, `jev.json` and `ledger.jsonl`
+co-live there because nothing rebuilds those folders, so the install survives
+the dev repo moving or being deleted; the registered command pins
+`JEV_KERNEL_DATA_DIR` to that folder, and running straight from the repo
+falls back to a shared `~/.jev-kernel/`. The `session` tier is QwenPaw-only
+by construction — there is no provider manager behind a hook — and degrades
+to `unresolved:session` in the cascade, which is the ledgered fail-open the
+cascade already defines.
+
 ## Bounded questions, calibrated answers
 
 Every question is one of three kinds (noul / choice / score) and every answer

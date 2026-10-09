@@ -395,22 +395,26 @@ class RobustnessTests(unittest.TestCase):
         pkg = load_pkg()
         m = importlib.import_module(pkg.__name__ + ".main")
 
-        class Boom(m.JevKernelMiddleware):
-            async def _judge(self, cfg, tool_name, raw_input):
-                raise RuntimeError("kaboom")
+        async def boom(*args, **kwargs):
+            raise RuntimeError("kaboom")
 
-        mw = Boom("/tmp")
+        original = m.decide.judge_tool_call
+        m.decide.judge_tool_call = boom
+        try:
+            mw = m.JevKernelMiddleware("/tmp")
 
-        async def run():
-            events = []
+            async def run():
+                events = []
 
-            async def next_handler():
-                yield "tool-output"
+                async def next_handler():
+                    yield "tool-output"
 
-            call = type("C", (), {"name": "execute_shell_command", "input": "{}"})()
-            async for ev in mw.on_acting(None, {"tool_call": call}, next_handler):
-                events.append(ev)
-            return events
+                call = type("C", (), {"name": "execute_shell_command", "input": "{}"})()
+                async for ev in mw.on_acting(None, {"tool_call": call}, next_handler):
+                    events.append(ev)
+                return events
 
-        events = asyncio.run(run())
+            events = asyncio.run(run())
+        finally:
+            m.decide.judge_tool_call = original
         self.assertEqual(events, ["tool-output"])  # fail-open: tool still runs

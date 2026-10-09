@@ -1,8 +1,8 @@
 {
   "id": "jev-kernel",
   "name": "Jev Judgment Kernel",
-  "version": "0.1.0",
-  "type": "middleware",
+  "version": "0.2.0",
+  "type": "general",
   "description": "A mu-style judgment kernel for QwenPaw: at decision points on the tool seam a small fast judge (jev / TypeSafe System One protocol, any HTTP judge, or any OpenAI-compatible chat model) answers one bounded typed question (noul/choice/score) with a calibrated probability. Verdicts cascade through judge tiers, land in a ledger, and in active mode can deny a tool call or escalate it to the human; shadow mode records without enforcing so you can read the ledger before handing a point to a judge. Reference: github.com/qybaihe/mu (docs/judges.md, docs/reference/decision-points.md).",
   "description_i18n": {
     "zh-CN": "mu 式判断内核：在工具接缝的决策点上，让一个小而快的 judge（jev / System One 协议、任意 HTTP judge 或任意 OpenAI 兼容聊天模型）回答一个有界的类型化问题（noul/choice/score），附带校准概率。裁决按 tiers 级联并写入 ledger；active 模式下可拒绝工具调用或升级给人类确认，shadow 模式只记录不拦截，便于先读 ledger 再放权。参考：github.com/qybaihe/mu。",
