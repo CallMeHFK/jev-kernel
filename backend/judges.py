@@ -38,7 +38,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from .config import load_config
+from .config import load_config, num
 from .questions import Question, Verdict, fallback_verdict, parse_verdict
 
 logger = logging.getLogger("jev_kernel.judges")
@@ -269,7 +269,7 @@ async def ask_cascade(
     """Ask every question through the point's judge cascade."""
     cfg = load_config()
     thresholds = cfg.get("thresholds") or {}
-    default_timeout = int(cfg.get("timeoutMs") or 4000)
+    default_timeout = int(num(cfg.get("timeoutMs"), 4000))
 
     routes = cfg.get("routes") or {}
     names = routes.get(point)
@@ -294,7 +294,7 @@ async def ask_cascade(
                 break
             tried.append(spec["name"])
             wire = {key: q.as_dict() for key, q in pending.items()}
-            timeout_ms = int(spec.get("timeoutMs") or default_timeout)
+            timeout_ms = int(num(spec.get("timeoutMs"), default_timeout))
             started = time.monotonic()
             try:
                 answers = await asyncio.to_thread(

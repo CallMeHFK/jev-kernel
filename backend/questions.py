@@ -21,6 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .config import num
+
 KINDS = ("noul", "choice", "score")
 DEFAULT_CRITERIA = ["0", "5", "10"]
 
@@ -101,9 +103,9 @@ def parse_verdict(
     """Validate one wire answer; None when malformed (cascade continues)."""
     if not isinstance(raw, dict):
         return None
-    yes = float(thresholds.get("yes", 0.85))
-    no = float(thresholds.get("no", 0.15))
-    min_p = float(thresholds.get("minProbability", 0.6))
+    yes = num(thresholds.get("yes"), 0.85)
+    no = num(thresholds.get("no"), 0.15)
+    min_p = num(thresholds.get("minProbability"), 0.6)
 
     if question.kind == "noul":
         p = raw.get("probability", raw.get("p"))

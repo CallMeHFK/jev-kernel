@@ -80,7 +80,7 @@ for _mod_name in list(_sys.modules):
             del _sys.modules[_mod_name]
 
 from . import judges, ledger, tools
-from .config import load_config, point_mode, plugin_data_dir
+from .config import load_config, num, point_mode, plugin_data_dir
 from .questions import Question
 
 logger = logging.getLogger("jev_kernel.qwenpaw")
@@ -159,7 +159,7 @@ class JevKernelMiddleware(MiddlewareBase):
             risky = (
                 not verdict.fallback
                 and verdict.value is True
-                and verdict.probability >= float(thresholds.get("risk", 0.85))
+                and verdict.probability >= num(thresholds.get("risk"), 0.85)
             )
             self._record("tool.risk", mode, tool_name, state, question, verdict,
                          bool(risky and mode == "active"), cfg)
@@ -181,7 +181,7 @@ class JevKernelMiddleware(MiddlewareBase):
                 approved = (
                     not verdict.fallback
                     and verdict.value is True
-                    and verdict.probability >= float(thresholds.get("yes", 0.85))
+                    and verdict.probability >= num(thresholds.get("yes"), 0.85)
                 )
                 self._record("tool.approval", mode, tool_name, state, question,
                              verdict, bool(not approved and mode == "active"), cfg)
@@ -205,16 +205,19 @@ class JevKernelMiddleware(MiddlewareBase):
         input_kwargs: dict[str, Any],
         next_handler: Callable[..., AsyncGenerator[Any, None]],
     ) -> AsyncGenerator[Any, None]:
-        cfg = load_config()
         tool_call = input_kwargs.get("tool_call")
         name = getattr(tool_call, "name", "") or ""
         raw_input = getattr(tool_call, "input", "") or ""
 
-        if name not in set(cfg.get("skipTools") or []):
-            denial = await self._judge(cfg, name, raw_input)
-            if denial is not None:
-                yield self._deny(denial, name)
-                return
+        try:
+            cfg = load_config()
+            if name not in set(cfg.get("skipTools") or []):
+                denial = await self._judge(cfg, name, raw_input)
+                if denial is not None:
+                    yield self._deny(denial, name)
+                    return
+        except Exception:  # noqa: BLE001 - the kernel must never abort the agent loop
+            logger.exception("jev-kernel: judgment failed for %s; failing open", name)
 
         async for event in next_handler():
             yield event

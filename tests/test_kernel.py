@@ -373,3 +373,44 @@ class JevKernelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class RobustnessTests(unittest.TestCase):
+    """The kernel must never abort the agent loop, whatever the config says."""
+
+    def test_bad_config_numbers_fall_back_to_defaults(self):
+        pkg = load_pkg()
+        config = importlib.import_module(pkg.__name__ + ".config")
+        questions = importlib.import_module(pkg.__name__ + ".questions")
+        self.assertEqual(config.num("3s", 4000), 4000.0)
+        self.assertEqual(config.num(None, 0.85), 0.85)
+        spec = config._normalize("x", {"timeoutMs": "soon"})
+        self.assertEqual(spec["timeoutMs"], 0)
+        q = questions.Question("p", "noul", "t?")
+        v = questions.parse_verdict(q, {"probability": 0.9}, {"yes": "high", "no": None})
+        self.assertIsNotNone(v)
+        self.assertFalse(v.uncertain)
+
+    def test_on_acting_fails_open_when_judge_explodes(self):
+        pkg = load_pkg()
+        m = importlib.import_module(pkg.__name__ + ".main")
+
+        class Boom(m.JevKernelMiddleware):
+            async def _judge(self, cfg, tool_name, raw_input):
+                raise RuntimeError("kaboom")
+
+        mw = Boom("/tmp")
+
+        async def run():
+            events = []
+
+            async def next_handler():
+                yield "tool-output"
+
+            call = type("C", (), {"name": "execute_shell_command", "input": "{}"})()
+            async for ev in mw.on_acting(None, {"tool_call": call}, next_handler):
+                events.append(ev)
+            return events
+
+        events = asyncio.run(run())
+        self.assertEqual(events, ["tool-output"])  # fail-open: tool still runs

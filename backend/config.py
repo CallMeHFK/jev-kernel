@@ -148,6 +148,14 @@ def resolve_judge_name(
     return []
 
 
+def num(value: Any, default: float) -> float:
+    """Config numbers must never crash the kernel (bad value -> default)."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _normalize(name: str, spec: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": name,
@@ -155,7 +163,7 @@ def _normalize(name: str, spec: dict[str, Any]) -> dict[str, Any]:
         "baseUrl": str(spec.get("baseUrl", "")).rstrip("/"),
         "model": str(spec.get("model", "")),
         "apiKeyEnv": str(spec.get("apiKeyEnv", "")),
-        "timeoutMs": int(spec.get("timeoutMs", 0) or 0),
+        "timeoutMs": int(num(spec.get("timeoutMs"), 0)),
         "freeTier": bool(spec.get("freeTier", False)),
     }
 
