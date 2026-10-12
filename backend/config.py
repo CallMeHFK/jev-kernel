@@ -29,6 +29,8 @@ logger = logging.getLogger("jev_kernel.config")
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
 
 DEFAULTS: dict[str, Any] = {
+    # global kill-switch, read by backend/main.py _factory
+    "enabled": True,
     # decision point -> mode (active | shadow | off); mu's three modes.
     # shadow records verdicts in the ledger but never changes behaviour;
     # active lets the verdict deny/escalate; off skips the judge entirely.
@@ -44,8 +46,9 @@ DEFAULTS: dict[str, Any] = {
     # named judge specs: {name: {type, baseUrl, model, apiKeyEnv, timeoutMs}}
     "judges": {},
     "thresholds": {"yes": 0.85, "no": 0.15, "minProbability": 0.6, "risk": 0.85},
-    # tool.approval only intercepts these tools.
-    "approvalTools": ["execute_shell_command", "run_command"],
+    # tool.approval only intercepts these tools (QwenPaw's own shell tools
+    # plus the hook hosts' command tool names).
+    "approvalTools": ["execute_shell_command", "run_command", "Bash", "shell"],
     # never judge our own tools (no recursion).
     "skipTools": ["jev_ask", "jev_ledger"],
     "timeoutMs": 4000,
@@ -212,15 +215,3 @@ def _builtin_jev() -> list[dict[str, Any]]:
         ))
     return [_normalize(n, s) for n, s in order]
 
-
-def judges_for_point(
-    cfg: dict[str, Any], point: str, agent_config: Any = None
-) -> list[dict[str, Any]]:
-    routes = cfg.get("routes") or {}
-    names = routes.get(point)
-    if not isinstance(names, list) or not names:
-        names = cfg.get("tiers") or []
-    specs: list[dict[str, Any]] = []
-    for name in names:
-        specs.extend(resolve_judge_name(cfg, str(name), agent_config))
-    return specs

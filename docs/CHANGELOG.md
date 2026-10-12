@@ -3,6 +3,30 @@
 Newest first. The release workflow tags `vX.Y.Z` from `plugin.json` and uses
 the matching section below as the release notes.
 
+## v0.2.1
+
+Hardening pass over the kernel, the adapter and the docs.
+
+- `scripts/systemone_adapter.py`: `do_POST` wraps request parsing — a
+  non-numeric `Content-Length` or a truncated/malformed JSON body now gets a
+  `400` instead of an unhandled exception wedging the connection.
+- `backend/config.py`: `DEFAULTS` gains an explicit `enabled: true` (the
+  middleware factory's kill-switch no longer relies on an absent key), and
+  `ledgerTail` (default 20) is a first-class knob.
+- `backend/tools.py`: `jev_ledger` honors `ledgerTail` when no `limit` is
+  passed.
+- `backend/hook.py`: `envelope_for` handles both host payload shapes.
+- `approvalTools` default gains the hook hosts' command tool names (`Bash`,
+  `shell`).
+- `backend/judges.py`: the unused `judges_for_point` helper is removed.
+- Tests: per-run `mkdtemp` isolation with class-level server teardown
+  (`server_close`), plus new coverage for the adapter's 400 paths, the
+  `ledgerTail` default, and ledger rotation — 46 tests.
+- Docs: the transport count says four everywhere; the Privacy section states
+  plainly that the judged state (tool name + truncated input snippet) is
+  always sent to the configured judge and `recordState` only gates the ledger
+  copy; `jev.example.json` uses placeholder endpoints only.
+
 ## v0.2.0
 
 The kernel learns to live outside QwenPaw: the same two decision points now

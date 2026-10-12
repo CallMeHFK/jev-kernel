@@ -16,8 +16,10 @@ import importlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import types
 import unittest
@@ -26,7 +28,6 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 REPO = Path(__file__).resolve().parent.parent
-TMP = Path(__file__).resolve().parent / "tmp_hook"
 
 
 class StubJudge(BaseHTTPRequestHandler):
@@ -69,9 +70,9 @@ class HookTests(unittest.TestCase):
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), StubJudge)
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
-        TMP.mkdir(parents=True, exist_ok=True)
-        cls.cfg_path = TMP / "jev.json"
-        cls.data_dir = TMP / "data"
+        cls.tmp = Path(tempfile.mkdtemp(prefix="jev-hook-"))
+        cls.cfg_path = cls.tmp / "jev.json"
+        cls.data_dir = cls.tmp / "data"
         os.environ["JEV_KERNEL_CONFIG"] = str(cls.cfg_path)
         os.environ["JEV_KERNEL_DATA_DIR"] = str(cls.data_dir)
 
@@ -90,6 +91,8 @@ class HookTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
+        cls.server.server_close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
 
     @classmethod
     def write_cfg(cls, **over):
@@ -150,7 +153,9 @@ class HookTests(unittest.TestCase):
             "toolName": "Write", "toolInput": {"file_path": "/etc/passwd", "content": "x"},
         })
         self.assertEqual(rc, 0)
-        inner = json.loads(out)["hookSpecificOutput"]
+        doc = json.loads(out)
+        self.assertEqual(set(doc), {"hookSpecificOutput"})
+        inner = doc["hookSpecificOutput"]
         self.assertEqual(inner["permissionDecision"], "deny")
         # ZCode's strict schema silently discards documents with unknown keys:
         # the envelope must carry exactly the keys above, nothing else.
@@ -168,6 +173,10 @@ class HookTests(unittest.TestCase):
         doc = json.loads(out)
         self.assertEqual(doc["decision"], "block")
         self.assertIn("tool.risk", doc["reason"])
+        self.assertIn("hookSpecificOutput", doc)
+        inner = doc["hookSpecificOutput"]
+        self.assertEqual(inner["permissionDecision"], "deny")
+        self.assertEqual(set(inner), {"hookEventName", "permissionDecision", "permissionDecisionReason"})
 
     def test_approval_point_escalates_to_ask(self):
         self.write_cfg(

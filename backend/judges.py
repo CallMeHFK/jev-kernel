@@ -1,6 +1,6 @@
 """Judge transports and the cascade (mu docs/judges.md, protocol-faithful).
 
-Three transports, same wire questions:
+Four transports, same wire questions:
 
 * ``typesafe`` — any service speaking TypeSafe's System One protocol:
   ``POST {model, state, questions}`` -> ``{answers}``. mu's baseUrl

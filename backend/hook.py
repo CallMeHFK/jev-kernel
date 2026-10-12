@@ -59,15 +59,19 @@ def tool_call_of(payload: dict[str, Any]) -> tuple[str, Any]:
 
 def envelope_for(host: str, decision: decide.Decision) -> dict[str, Any]:
     """The verdict in the host's dialect. Only called when intervening."""
-    if host == "codex" and decision.action == "deny":
-        return {"decision": "block", "reason": decision.message}
-    return {
+    envelope: dict[str, Any] = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": decision.action,
             "permissionDecisionReason": decision.message,
         }
     }
+    if host == "codex" and decision.action == "deny":
+        # Codex deny emits both shapes: the envelope every host reads, plus
+        # the top-level block codex additionally honours.
+        envelope["decision"] = "block"
+        envelope["reason"] = decision.message
+    return envelope
 
 
 async def _run(host: str, payload: dict[str, Any]) -> dict[str, Any] | None:

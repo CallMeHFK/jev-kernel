@@ -1,4 +1,5 @@
 {
+  "enabled": true,
   "points": {
     "tool.risk": "shadow",
     "tool.approval": "off"
@@ -19,9 +20,9 @@
     },
     "fast": {
       "type": "llm",
-      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "baseUrl": "https://chat.example.com/v1",
       "model": "qwen-plus",
-      "apiKeyEnv": "DASHSCOPE_API_KEY",
+      "apiKeyEnv": "EXAMPLE_LLM_KEY",
       "timeoutMs": 4000
     }
   },
@@ -35,5 +36,6 @@
   "skipTools": ["jev_ask", "jev_ledger"],
   "timeoutMs": 4000,
   "recordState": false,
-  "stateChars": 4000
+  "stateChars": 4000,
+  "ledgerTail": 20
 }
