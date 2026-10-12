@@ -92,8 +92,9 @@ ever asked a bounded question with a number attached.
 
 4. When the shadow ledger looks calibrated, flip the point:
    `"points": { "tool.risk": "active" }`. From then on a confident `yes` on
-   `tool.risk` denies the call, and `tool.approval` escalates to the human
-   instead of running.
+   `tool.risk` denies the call. `tool.approval` escalates a call to human
+   confirmation only when it is itself `active` and the tool is listed in
+   `approvalTools`.
 
 ## Other agent hosts (PreToolUse hook mode)
 
@@ -119,7 +120,7 @@ the dev repo can move or be deleted afterwards; QwenPaw's own install path
 entry into the host's hook config (`~/.zcode/hooks.json`,
 `~/.qoder-cn/settings.json`, `~/.claude/settings.json`,
 `~/.codex/hooks.json`), preserves hooks already there, backs the file up to
-`<path>.jev-bak`, and is idempotent — re-running it is also the upgrade path
+`<path>.jev-bak` on the first write, and is idempotent — re-running it is also the upgrade path
 (re-deploys the code, rewrites a drifted command). `--uninstall` removes only
 jev-kernel's hook entry and keeps the deployed folder (it holds the ledger);
 `--dry-run` prints without writing. ZCode asks you to trust new hooks on
@@ -241,7 +242,7 @@ point — read it before you flip a point to `active`.
 ## Does it work?
 
 ```bash
-python -m unittest discover -s tests -v   # 43 tests, bare interpreter
+python -m unittest discover -s tests -v   # 46 tests, bare interpreter
 python packaging/build_plugin_zip.py      # dist/jev-kernel.zip
 ```
 
@@ -281,11 +282,15 @@ without that, a reinstall keeps judging with the previous code. See
 ## Privacy
 
 The kernel sends one small state and one question per decision point to the
-judges you configure, and nothing else — no telemetry, no phone-home. The
-state is the tool name plus (only when `recordState: true`) a truncated input
-snippet; the default keeps it off. Your `jev.json` names your judge endpoints
-and is gitignored; the ledger records your tool calls and lives outside the
-repo. Sanitize ledger excerpts before pasting them anywhere public.
+judges you configure, and nothing else — no telemetry, no phone-home, nothing
+beyond the judges your `jev.json` names. The judged state is the tool name
+plus a truncated input snippet (`stateChars`, default 4000), and it is always
+sent to the configured judge — the judge cannot answer "is this call
+destructive?" without seeing the call. `recordState` (default `false`) only
+controls whether that state is additionally written into the local ledger.
+Your `jev.json` names your judge endpoints and is gitignored; the ledger
+records your tool calls and lives outside the repo. Sanitize ledger excerpts
+before pasting them anywhere public.
 
 ## License
 

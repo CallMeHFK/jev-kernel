@@ -13,9 +13,11 @@ that pattern to QwenPaw:
   ``shadow`` (verdict is ledgered, behaviour unchanged), ``off``;
 * judges cascade through ``tiers``/``routes``; later judges only see the
   questions earlier ones left uncertain;
-* transports: TypeSafe System One protocol (``POST {model, state,
-  questions}``), plain HTTP (``POST {state, questions}`` -> ``{answers}``),
-  or any OpenAI-compatible chat model prompted to answer as JSON;
+* four transports: ``typesafe`` (TypeSafe System One protocol, ``POST
+  {model, state, questions}``), ``http`` (plain ``POST {state, questions}``
+  -> ``{answers}``), ``systemone`` (raw System One servers — ollama
+  decision models — with the dialect translated both ways), or ``llm``
+  (any OpenAI-compatible chat model prompted to answer as JSON);
 * the built-in ``jev`` tier resolves mu's provider order from environment
   keys (TYPESAFE_API_KEY, MU_JUDGE_OPENROUTER_API_KEY, AI_GATEWAY_API_KEY,
   OPENCODE_API_KEY, CLOUDFLARE_*), falling back to the free OpenCode Zen

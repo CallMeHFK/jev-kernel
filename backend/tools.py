@@ -41,7 +41,7 @@ except ImportError:  # allow unit tests without QwenPaw installed
         return deco
 
 from . import judges, ledger
-from .config import load_config
+from .config import load_config, num
 from .questions import Question
 
 ASK_DESC = (
@@ -99,8 +99,10 @@ async def jev_ask(
 
 
 @tool_descriptor(name="jev_ledger", description=LEDGER_DESC)
-async def jev_ledger(limit: int = 20) -> ToolResponse:
+async def jev_ledger(limit: int | None = None) -> ToolResponse:
     """Read the last verdict records from the ledger."""
-    records = ledger.tail(limit)
+    cfg = load_config()
+    eff = int(num(cfg.get("ledgerTail"), 20)) if limit is None else int(limit)
+    records = ledger.tail(eff)
     text = json.dumps(records, ensure_ascii=False, indent=1)
     return ToolResponse(content=[TextBlock(type="text", text=text)])

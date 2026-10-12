@@ -11,7 +11,10 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import os
+import shutil
 import sys
+import tempfile
 import threading
 import types
 import unittest
@@ -20,7 +23,6 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 BACKEND = Path(__file__).resolve().parent.parent / "backend"
-TMP = Path(__file__).resolve().parent / "tmp"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -121,8 +123,8 @@ class JevKernelTests(unittest.TestCase):
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
 
-        TMP.mkdir(parents=True, exist_ok=True)
-        cls.cfg_path = TMP / "jev.json"
+        cls.tmp = Path(tempfile.mkdtemp(prefix="jev-kernel-"))
+        cls.cfg_path = cls.tmp / "jev.json"
         cls.cfg_path.write_text(json.dumps({
             "points": {"tool.risk": "active", "tool.approval": "active"},
             "tiers": ["unc", "yesj"],
@@ -143,10 +145,9 @@ class JevKernelTests(unittest.TestCase):
                          "timeoutMs": 300},
             },
         }), encoding="utf-8")
-        import os
 
         os.environ["JEV_KERNEL_CONFIG"] = str(cls.cfg_path)
-        os.environ["JEV_KERNEL_DATA_DIR"] = str(TMP / "data")
+        os.environ["JEV_KERNEL_DATA_DIR"] = str(cls.tmp / "data")
 
         pkg = load_pkg()
         cls.config = importlib.import_module(pkg.__name__ + ".config")
@@ -154,12 +155,14 @@ class JevKernelTests(unittest.TestCase):
         cls.judges = importlib.import_module(pkg.__name__ + ".judges")
         cls.ledger = importlib.import_module(pkg.__name__ + ".ledger")
         cls.main = importlib.import_module(pkg.__name__ + ".main")
+        cls.tools = importlib.import_module(pkg.__name__ + ".tools")
         # config caches mtime; force a reload after writing the file
         cls.config._CACHE.update(path=None, mtime=0.0, cfg=None)
 
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
+        cls.server.server_close()
 
     def cfg(self, **over):
         cfg = self.config.load_config()
@@ -251,7 +254,7 @@ class JevKernelTests(unittest.TestCase):
     def run_acting(self, mode_risk, tool="write_file", raw="rm -rf /"):
         cfg = self.cfg(points={"tool.risk": mode_risk, "tool.approval": "off"})
         self.config._CACHE["cfg"] = cfg
-        mw = self.main.JevKernelMiddleware(str(TMP))
+        mw = self.main.JevKernelMiddleware(str(self.tmp))
 
         class Call:
             name = tool
@@ -290,7 +293,7 @@ class JevKernelTests(unittest.TestCase):
     def test_no_judge_means_no_change(self):
         cfg = self.cfg(tiers=["dead"], points={"tool.risk": "active", "tool.approval": "off"})
         self.config._CACHE["cfg"] = cfg
-        mw = self.main.JevKernelMiddleware(str(TMP))
+        mw = self.main.JevKernelMiddleware(str(self.tmp))
 
         class Call:
             name = "write_file"
@@ -353,7 +356,7 @@ class JevKernelTests(unittest.TestCase):
             approvalTools=["execute_shell_command"],
         )
         self.config._CACHE["cfg"] = cfg
-        mw = self.main.JevKernelMiddleware(str(TMP))
+        mw = self.main.JevKernelMiddleware(str(self.tmp))
 
         class Call:
             name = "execute_shell_command"
@@ -418,3 +421,58 @@ class RobustnessTests(unittest.TestCase):
         finally:
             m.decide.judge_tool_call = original
         self.assertEqual(events, ["tool-output"])  # fail-open: tool still runs
+
+
+class LedgerToolTests(unittest.TestCase):
+    """jev_ledger honors the configured ledgerTail; rotation stays single-generation."""
+
+    def _fresh_data_dir(self):
+        d = Path(tempfile.mkdtemp(prefix="jev-ledger-"))
+        self.addCleanup(shutil.rmtree, d, True)
+        old = os.environ.get("JEV_KERNEL_DATA_DIR")
+        os.environ["JEV_KERNEL_DATA_DIR"] = str(d)
+
+        def restore():
+            if old is None:
+                os.environ.pop("JEV_KERNEL_DATA_DIR", None)
+            else:
+                os.environ["JEV_KERNEL_DATA_DIR"] = old
+
+        self.addCleanup(restore)
+        return d
+
+    @staticmethod
+    def _kernel():
+        pkg = load_pkg()
+        return (
+            importlib.import_module(pkg.__name__ + ".config"),
+            importlib.import_module(pkg.__name__ + ".ledger"),
+            importlib.import_module(pkg.__name__ + ".tools"),
+        )
+
+    def test_jev_ledger_defaults_to_configured_tail(self):
+        config, ledger, tools = self._kernel()
+        self._fresh_data_dir()
+        for i in range(5):
+            ledger.append({"point": "p", "i": i})
+        cfg = json.loads(json.dumps(config.load_config()))
+        cfg["ledgerTail"] = 3
+        config._CACHE["cfg"] = cfg
+        self.addCleanup(lambda: config._CACHE.update(cfg=None))
+
+        out = asyncio.run(tools.jev_ledger())
+        self.assertEqual(len(json.loads(out.content[0].text)), 3)   # ledgerTail, not 20
+        out = asyncio.run(tools.jev_ledger(limit=5))
+        self.assertEqual(len(json.loads(out.content[0].text)), 5)   # explicit limit wins
+
+    def test_ledger_rotates_single_generation(self):
+        _, ledger, _ = self._kernel()
+        self._fresh_data_dir()
+        path = ledger.ledger_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x" * (ledger.LEDGER_MAX_BYTES + 1))
+        ledger.append({"point": "p"})
+        rotated = path.with_suffix(".jsonl.1")
+        self.assertTrue(rotated.exists())
+        self.assertGreater(rotated.stat().st_size, ledger.LEDGER_MAX_BYTES)
+        self.assertLess(path.stat().st_size, ledger.LEDGER_MAX_BYTES)

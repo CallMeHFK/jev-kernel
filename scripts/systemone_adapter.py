@@ -105,8 +105,15 @@ class Handler(BaseHTTPRequestHandler):
         self._send({"status": "ok", "upstream": UPSTREAM})
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length") or 0)
-        payload = json.loads(self.rfile.read(length) or b"{}")
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            payload = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            # JSONDecodeError is a ValueError subclass; both named for intent:
+            # a non-numeric Content-Length or a malformed body is a 400,
+            # never an unhandled exception wedging the connection.
+            self._send({"error": "bad request"}, 400)
+            return
         questions = payload.get("questions") or {}
         body = {
             "model": payload.get("model") or os.environ.get("OLLAMA_MODEL", "clef-flash:latest"),
