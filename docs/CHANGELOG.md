@@ -3,6 +3,70 @@
 Newest first. The release workflow tags `vX.Y.Z` from `plugin.json` and uses
 the matching section below as the release notes.
 
+## v0.2.3
+
+Shadow evidence you can act on, before handing the router live traffic.
+
+- `backend/routing.py`: an abstention now says which kind it is.
+  `no_verdict` means no judge answered (dead, timeout, malformed);
+  `uncertain` means a judge answered below `thresholds.minProbability`. The
+  cascade discards that answer, so the decision recovers the judge's pick
+  and probability from the fallback string into `detail` (e.g.
+  `default@0.43`) and sets `confidence` to the real probability instead of
+  `0.0`. Behaviour is unchanged — both still return `ask_human` — but a
+  shadow review can now tell a calibration gap from an infrastructure gap.
+- `backend/tools.py`: the ledger records `detail` alongside `reason`.
+- `scripts/route_shadow_report.py`: new `uncertain_picks` breakdown (the
+  judge's discarded answer), rendered as one line and available in `--json`.
+- `scripts/route_replay_eval.py`: labeled replay through the same
+  `_route_instructions` → judge → `decide_route` path, for fresh installs
+  whose live ledger has too few records to judge. 28 cases in
+  `scripts/route_cases.json` cover every candidate, one cross-owner pair
+  (must abstain), one ambiguous request (must abstain) and the disabled-`SE`
+  MIS gap (unlabeled, reported but not scored). Exits non-zero below
+  `--min-agreement` (default 0.9) or `--min-scored` (default 20).
+- Tests: 65 total; new coverage for `uncertain` vs `no_verdict`, the
+  ledger's `detail`, and the replay case set.
+- Measured on the live `lux` judge: 23/23 scored cases agree (100%), 2/25
+  labeled cases abstain at p=0.43 / p=0.37, median 120 ms, and `default`
+  grabbed no delegated task.
+
+## v0.2.2
+
+Agent routing on the same judgment seam, without touching the QwenPaw kernel.
+
+- `backend/routing.py`: one choice verdict → `dispatch` or `ask_human`. A
+  choice is actionable only above `agentRoute.threshold` (default 0.6) and
+  with a lead over the runner-up of at least `agentRoute.margin` (default
+  0.1); between `askMin` (0.45) and the threshold, on a close call, on a
+  judge abstention, or on a fallback the answer is `ask_human`.
+- `backend/tools.py`: new `jev_route(task, candidates, shadow_expected)`
+  tool. It returns only `agent_id` / `action` / `reason` / `mode` (plus
+  `expected`/`agree` when shadowing) and never calls QwenPaw, so the
+  orchestrator keeps its native `chat_with_agent` dispatch and the target
+  agent keeps its own model.
+- Shadow support: pass the agent the dispatch table chose as
+  `shadow_expected`; the ledger records `recommended`, `expected`, `agree`,
+  `confidence` and `margin`, and `enforced` stays false until the point is
+  `active`.
+- `backend/config.py`: `points.agent_route` defaults to `shadow`;
+  `agentRoute` carries the candidate roster, per-agent descriptions, and the
+  three gates; `skipTools` gains `jev_route` so the router is never judged
+  by the middleware (no recursion).
+- `backend/main.py`: registers `jev_route` for governance, `register_tool`,
+  bootstrap injection and the workspace mode, and passes
+  `tool_type="internal"` on all three tools (the default `network` conflicted
+  with the governance pre-registration).
+- `scripts/route_shadow_report.py`: agreement report over the ledger —
+  scored dispatches only, abstentions by reason, disagreement pairs,
+  confidence buckets.
+- Tests: 61 total; new coverage for dispatch, judge abstention, close-call
+  margin, low-confidence fallback, shadow agreement/disagreement, active
+  enforcement, single-candidate short-circuit, reserved `ask_human`
+  filtering, empty candidates and `off`.
+- Docs: README decision-point table, agent-routing contract, tools list and
+  `jev.example.json` updated.
+
 ## v0.2.1
 
 Hardening pass over the kernel, the adapter and the docs.

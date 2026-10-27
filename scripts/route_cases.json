@@ -1,0 +1,38 @@
+[
+  {"task": "帮我写一份边缘计算任务调度的专利交底书，要有权利要求和附图说明", "expected": "IPP"},
+  {"task": "检索 2024 年以来 diffusion policy 的相关论文，做一份文献综述", "expected": "IPP"},
+  {"task": "把这份技术方案排成 Word 交底书，表格和图都要带题注", "expected": "IPP"},
+  {"task": "用 idea-spark 给我生成一个科研点子，并做新颖性审计", "expected": "IPP"},
+
+  {"task": "给这个 Python 仓库补 pytest 测试，顺手修掉 CI 里的 ruff 报错", "expected": "Codex_Agent"},
+  {"task": "重构 backend/routing.py，把门控逻辑抽成独立函数", "expected": "Codex_Agent"},
+  {"task": "解析这个 TDMS 文件，提取通道数据并导出 CSV", "expected": "Codex_Agent"},
+  {"task": "帮我搭一条 GitHub Actions 流水线，跑测试并自动发 release", "expected": "Codex_Agent"},
+
+  {"task": "检查这块 KiCad 原理图的 ERC，并给出 DRC 修改建议", "expected": "PCB_Agent"},
+  {"task": "用 build123d 做一个参数化法兰 3D 模型，导出 STEP", "expected": "PCB_Agent"},
+  {"task": "跑一下这个 SPICE 电路仿真，看输出电压纹波", "expected": "PCB_Agent"},
+  {"task": "给这块板子做器件选型，找一颗可以替代的 LDO", "expected": "PCB_Agent"},
+
+  {"task": "把这份架构说明画成一张架构图", "expected": "Designer"},
+  {"task": "生成一张产品发布会用的竖版信息图", "expected": "Designer"},
+  {"task": "把这个 CSV 做成编辑级数据图表，导出 SVG", "expected": "Designer"},
+
+  {"task": "写一份这个功能的 PRD，包含市场规模测算和竞品定位", "expected": "PM"},
+  {"task": "把这个项目拆成任务计划，估算工期和风险，排一个 MPP 甘特图", "expected": "PM"},
+  {"task": "整理本周的日报看板", "expected": "PM"},
+
+  {"task": "帮我叫一杯瑞幸生椰拿铁，送到公司前台", "expected": "PersonalHelper"},
+  {"task": "查一下明天从合肥到南京的高铁，订一张早上的票", "expected": "PersonalHelper"},
+
+  {"task": "给这个技能建一套评测集，跑基线并做失败归因", "expected": "SkillEvolver_Agent"},
+  {"task": "用 nuwa 给这个流程造一个初版 Agent Skill", "expected": "SkillEvolver_Agent"},
+
+  {"task": "现在几点了？", "expected": "default"},
+  {"task": "你刚才那个任务进度到哪了？", "expected": "default"},
+
+  {"task": "帮我写专利交底书，然后做成 PPT 给客户讲", "expected": "IPP", "note": "IPP 同时覆盖交底书与 Office/PPT，不算跨 owner"},
+  {"task": "先帮我画这块板子的原理图，再写一份专利交底书", "expected": null, "note": "PCB+IPP 跨 owner，期望 abstain"},
+  {"task": "帮我处理一下那个东西", "expected": null, "note": "指代不明，期望 abstain"},
+  {"task": "查一下 LCFC 的 MIS 数据，再写个脚本分析", "expected": null, "note": "SE disabled 的已知缺口，不计入一致率"}
+]

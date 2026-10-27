@@ -149,7 +149,7 @@ def _inject_bootstrap() -> None:
         mgr = PluginRegistry().get_workspace_manager()
         if mgr is not None and hasattr(mgr, "_bootstrap_kwargs"):
             funcs = mgr._bootstrap_kwargs.setdefault("builtin_tool_funcs", [])
-            for fn in (tools.jev_ask, tools.jev_ledger):
+            for fn in (tools.jev_ask, tools.jev_route, tools.jev_ledger):
                 if fn not in funcs:
                     funcs.append(fn)
     except Exception:  # noqa: BLE001
@@ -174,6 +174,8 @@ class JevKernelPlugin:
 
             DEFAULT_REGISTRY.register("JevAsk", "internal", "")
             DEFAULT_REGISTRY.register_python_name("jev_ask", "JevAsk")
+            DEFAULT_REGISTRY.register("JevRoute", "internal", "")
+            DEFAULT_REGISTRY.register_python_name("jev_route", "JevRoute")
             DEFAULT_REGISTRY.register("JevLedger", "internal", "")
             DEFAULT_REGISTRY.register_python_name("jev_ledger", "JevLedger")
         except Exception:  # noqa: BLE001
@@ -187,6 +189,15 @@ class JevKernelPlugin:
                 description=tools.ASK_DESC,
                 icon="⚖️",
                 enabled=True,
+                tool_type="internal",
+            )
+            api.register_tool(
+                tool_name="jev_route",
+                tool_func=tools.jev_route,
+                description=tools.ROUTE_DESC,
+                icon="🧭",
+                enabled=True,
+                tool_type="internal",
             )
             api.register_tool(
                 tool_name="jev_ledger",
@@ -194,6 +205,7 @@ class JevKernelPlugin:
                 description=tools.LEDGER_DESC,
                 icon="📒",
                 enabled=True,
+                tool_type="internal",
             )
         except Exception:  # noqa: BLE001
             logger.exception("jev-kernel: register_tool failed")
@@ -204,6 +216,7 @@ class JevKernelPlugin:
 
             descs = [
                 getattr(tools.jev_ask, "_tool_descriptor", None),
+                getattr(tools.jev_route, "_tool_descriptor", None),
                 getattr(tools.jev_ledger, "_tool_descriptor", None),
             ]
             descs = [d for d in descs if d is not None]
@@ -214,6 +227,18 @@ class JevKernelPlugin:
 
                     def tools(self):  # noqa: D102
                         return list(descs)
+
+                    def setup(self, workspace):  # noqa: D102
+                        # register_tool already injected these descriptors;
+                        # replace the same-plugin copies instead of colliding
+                        # with them on the mode projection.
+                        self._registered = []
+                        registry = workspace.plugins.tool_registry
+                        for desc in self.tools():
+                            if desc.name in registry:
+                                registry.unregister(desc.name)
+                            registry.register(desc)
+                            self._registered.append(("tool", desc))
 
                 api.register_mode(JevKernelMode)
         except Exception:  # noqa: BLE001

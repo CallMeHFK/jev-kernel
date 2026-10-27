@@ -34,7 +34,11 @@ DEFAULTS: dict[str, Any] = {
     # decision point -> mode (active | shadow | off); mu's three modes.
     # shadow records verdicts in the ledger but never changes behaviour;
     # active lets the verdict deny/escalate; off skips the judge entirely.
-    "points": {"tool.risk": "shadow", "tool.approval": "off"},
+    "points": {
+        "tool.risk": "shadow",
+        "tool.approval": "off",
+        "agent_route": "shadow",
+    },
     # cascade order: later judges only see questions earlier ones left
     # uncertain (mu's tiers semantics). Empty by default: no judge is
     # contacted until the operator configures one (or exports a provider
@@ -46,11 +50,41 @@ DEFAULTS: dict[str, Any] = {
     # named judge specs: {name: {type, baseUrl, model, apiKeyEnv, timeoutMs}}
     "judges": {},
     "thresholds": {"yes": 0.85, "no": 0.15, "minProbability": 0.6, "risk": 0.85},
+    # Agent routing (``jev_route``). The router only names an agent; the
+    # caller dispatches with its own agent tools. A choice is actionable
+    # only above ``threshold`` and with a lead over the runner-up of at
+    # least ``margin``; between ``askMin`` and ``threshold``, or on a close
+    # call, the answer is "ask the human" instead of a guess.
+    "agentRoute": {
+        "candidates": [
+            "IPP",
+            "Codex_Agent",
+            "PCB_Agent",
+            "Designer",
+            "PM",
+            "PersonalHelper",
+            "SkillEvolver_Agent",
+            "default",
+        ],
+        "descriptions": {
+            "IPP": "专利撰写/检索/交底书、文献综述、Office 文档排版（docx/pptx/xlsx/pdf）",
+            "Codex_Agent": "软件代码编写/审查/重构/调试、DevOps/CI、AI 模型与 Agent 框架",
+            "PCB_Agent": "电路设计/仿真/ERC/DRC/SPICE/KiCad、机械 CAD/3D 建模、固件",
+            "Designer": "图表/架构图/信息图/PPT 视觉、图像/视频/3D 渲染",
+            "PM": "产品需求/PRD、市场规模测算、项目计划/排期/风险、日报看板",
+            "PersonalHelper": "出行/地图/网盘/咖啡/音乐/视频/社媒/点单等生活场景",
+            "SkillEvolver_Agent": "技能创建/评测/优化/进化（S1/S2）",
+            "default": "编排者自答：闲聊、状态查询、跨域统筹、无需专业执行",
+        },
+        "threshold": 0.6,
+        "askMin": 0.45,
+        "margin": 0.1,
+    },
     # tool.approval only intercepts these tools (QwenPaw's own shell tools
     # plus the hook hosts' command tool names).
     "approvalTools": ["execute_shell_command", "run_command", "Bash", "shell"],
     # never judge our own tools (no recursion).
-    "skipTools": ["jev_ask", "jev_ledger"],
+    "skipTools": ["jev_ask", "jev_route", "jev_ledger"],
     "timeoutMs": 4000,
     # keep the judged state in ledger records (mu's recordState; off by
     # default because states hold user content).

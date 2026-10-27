@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 QwenPaw middleware plugin that puts a **mu-style judgment kernel on the tool
-seam**. At each decision point (`tool.risk`, `tool.approval`) a small fast
+seam**. At each decision point (`tool.risk`, `tool.approval`, `agent_route`) a small fast
 judge answers **one bounded typed question** — noul (yes/no), choice, or score
 — about a small state, with a **calibrated probability**. Verdicts **cascade**
 through judge tiers (later judges only see the questions earlier ones left
@@ -22,7 +22,7 @@ The same kernel also runs as a **PreToolUse hook** in other agent hosts —
 ZCode, Qoder, Claude Code and Codex share one verdict dialect — see
 [Other agent hosts](#other-agent-hosts-pretooluse-hook-mode).
 
-Defaults are inert: `tool.risk` starts in `shadow`, `tool.approval` in `off`,
+Defaults are inert: `tool.risk` and `agent_route` start in `shadow`, `tool.approval` in `off`,
 and `tiers` empty — **no judge is contacted until you configure one**. See
 [Quick start](#quick-start).
 
@@ -154,12 +154,49 @@ Hook mode differences from the QwenPaw plugin:
 
 ## How it works
 
-Two decision points sit on the tool seam, each with mu's three modes:
+Three decision points sit on the tool seam, each with mu's three modes:
 
 | Point | Question | `active` behaviour on a confident verdict |
 |---|---|---|
 | `tool.risk` | will this call destroy or irreversibly change user data or system state? | deny the tool call |
 | `tool.approval` | should this call wait for the human? | escalate to the human approval flow |
+| `agent_route` | which agent owns this task? | the orchestrator follows the recommended agent id |
+
+### Agent routing
+
+`jev_route(task, candidates, shadow_expected)` is the one-question router:
+it returns `agent_id` plus `action` (`dispatch` or `ask_human`) and never
+calls QwenPaw, so the orchestrator still dispatches with its own
+`chat_with_agent` / `submit_to_agent`. The target agent therefore keeps its
+own `active_model` and fallback chain; the kernel never sees or picks a
+model.
+
+A choice is actionable only when the judge answered, did not pick
+`ask_human`, cleared `agentRoute.threshold` (default 0.6), and led the
+runner-up by `agentRoute.margin` (default 0.1). Between `askMin` (0.45) and
+the threshold, on a close call, or on a fallback the answer is `ask_human`
+instead of a guess. `confidence` and `margin` go to the ledger, never into
+the dispatch call.
+
+In `shadow` mode the orchestrator keeps its dispatch table and passes the
+agent it actually chose as `shadow_expected`; the ledger records
+`recommended`, `expected`, `agree`, `confidence` and `margin`, so agreement
+can be measured before flipping the point to `active`. `mode` is echoed in
+the tool result: follow `agent_id` only when it says `active`. Read the
+agreement with `python3 scripts/route_shadow_report.py` (add `--json` for
+machine output).
+
+Two abstention reasons are kept apart, because they call for different
+fixes: `no_verdict` means no judge answered (dead, timeout, malformed) while
+`uncertain` means a judge answered below `thresholds.minProbability`; the
+ledger's `detail` carries the discarded pick (`default@0.43`), and
+`confidence` carries its probability instead of `0.0`. Before flipping a
+fresh install to `active`, replay a labeled task set through the same code
+path with `python3 scripts/route_replay_eval.py` (28 cases covering every
+candidate plus cross-owner and ambiguous abstain checks; it prints agreement
+and per-case `expected -> recommended`, and exits non-zero below 90%).
+Replay is not live shadow: it proves the router agrees on known work, while
+the ledger still proves it agrees on real traffic.
 
 Modes: `active` (verdicts can change what happens), `shadow` (verdicts are
 ledgered, behaviour unchanged), `off` (point not evaluated).
@@ -217,7 +254,8 @@ A cheap local judge first, the session model catching what it leaves uncertain
 `jev.json` mirrors mu's judge section: `points` (point → mode), `tiers`
 (default judge order), `routes` (per-point override), `judges` (name →
 `{type, baseUrl, model, apiKeyEnv, timeoutMs}`), `thresholds`
-(`yes`/`no`/`minProbability`/`risk`), `approvalTools`, `skipTools`,
+(`yes`/`no`/`minProbability`/`risk`), `agentRoute` (`candidates`,
+`descriptions`, `threshold`, `askMin`, `margin`), `approvalTools`, `skipTools`,
 `timeoutMs`, `recordState`, `stateChars`. It is hot-reloaded by mtime — edit
 and the next decision point picks it up, no restart. [`jev.example.json`](jev.example.json)
 documents every knob with placeholder endpoints; the repo never ships a real
@@ -237,12 +275,14 @@ point — read it before you flip a point to `active`.
 - `jev_ask` — ask the kernel one bounded typed question about a given state
   and get the calibrated verdict back (agents and scripts can use the same
   seam the middleware uses).
+- `jev_route` — route one task to one agent id, or `ask_human`; records
+  shadow agreement against the caller's own choice. The caller dispatches.
 - `jev_ledger` — read recent ledger records.
 
 ## Does it work?
 
 ```bash
-python -m unittest discover -s tests -v   # 46 tests, bare interpreter
+python -m unittest discover -s tests -v   # 61 tests, bare interpreter
 python packaging/build_plugin_zip.py      # dist/jev-kernel.zip
 ```
 
@@ -250,6 +290,8 @@ The suite covers the wire shapes, uncertainty margins, cascade fall-through,
 all four transports (against a local stub server speaking each dialect,
 including ollama's raw System One), dead-judge fallback, active denial,
 shadow pass-through, approval escalation, session-tier model inheritance,
+agent routing (dispatch, ask-human, close-call margin, shadow agreement,
+uncertain-vs-no-verdict reasons),
 publish hygiene, and the hook front end: each host's payload spelling and
 verdict dialect, ZCode's strict-schema key set, and fail-open on garbage
 stdin — including the installed invocation shape (`python3 backend/hook.py

@@ -85,6 +85,25 @@ class Handler(BaseHTTPRequestHandler):
             probs = {o: (0.9 if o == options[0] else 0.05) for o in options}
             self._send({"answers": {key: {"type": "choice", "choice": options[0],
                                           "probabilities": probs}}})
+        elif path == "/choice_last":      # judge abstains
+            options = questions[key].get("options") or []
+            probs = {o: (0.9 if o == options[-1] else 0.03) for o in options}
+            self._send({"answers": {key: {"type": "choice", "choice": options[-1],
+                                          "probabilities": probs}}})
+        elif path == "/choice_close":     # confident enough, but a near tie
+            options = questions[key].get("options") or []
+            probs = {o: 0.0 for o in options}
+            probs[options[0]] = 0.62
+            if len(options) > 1:
+                probs[options[1]] = 0.58
+            self._send({"answers": {key: {"type": "choice", "choice": options[0],
+                                          "probabilities": probs}}})
+        elif path == "/choice_low":       # below the ask floor
+            options = questions[key].get("options") or []
+            probs = {o: 0.0 for o in options}
+            probs[options[0]] = 0.5
+            self._send({"answers": {key: {"type": "choice", "choice": options[0],
+                                          "probabilities": probs}}})
         elif path == "/score":
             self._send({"answers": {key: {"type": "score", "score": 2, "confidence": 0.8}}})
         elif path == "/cf":               # Cloudflare-style envelope
@@ -141,6 +160,10 @@ class JevKernelTests(unittest.TestCase):
                         "model": "jev-1.13"},
                 "sysj": {"type": "systemone", "baseUrl": f"http://127.0.0.1:{cls.port}/ollama",
                          "model": "clef-flash-test"},
+                "routej": {"type": "http", "baseUrl": f"http://127.0.0.1:{cls.port}/choice"},
+                "route_last": {"type": "http", "baseUrl": f"http://127.0.0.1:{cls.port}/choice_last"},
+                "route_close": {"type": "http", "baseUrl": f"http://127.0.0.1:{cls.port}/choice_close"},
+                "route_low": {"type": "http", "baseUrl": f"http://127.0.0.1:{cls.port}/choice_low"},
                 "dead": {"type": "http", "baseUrl": "http://127.0.0.1:1/dead",
                          "timeoutMs": 300},
             },
@@ -240,6 +263,133 @@ class JevKernelTests(unittest.TestCase):
         answers = self.judges._judge_sync(cfg["judges"]["scorej"], {}, {"q0": qs.as_dict()}, 2000)
         v = self.questions.parse_verdict(qs, answers["q0"], cfg["thresholds"], "scorej")
         self.assertEqual(v.value, 2.0)
+
+    # -- agent routing (jev_route) ------------------------------------------
+
+    def set_route_cfg(self, judge="routej", mode="shadow", **agent_route):
+        cfg = self.cfg(
+            points={"tool.risk": "off", "tool.approval": "off",
+                    "agent_route": mode},
+            routes={"agent_route": [judge]},
+        )
+        cfg["agentRoute"] = {
+            "candidates": ["PCB_Agent", "Codex_Agent", "Designer"],
+            "threshold": 0.6,
+            "askMin": 0.45,
+            "margin": 0.1,
+        }
+        cfg["agentRoute"].update(agent_route)
+        self.config._CACHE["cfg"] = cfg
+        self.addCleanup(lambda: self.config._CACHE.update(cfg=None))
+        return cfg
+
+    def route(self, task, candidates=None, expected=None):
+        out = asyncio.run(self.tools.jev_route(
+            task, candidates, shadow_expected=expected))
+        return json.loads(out.content[0].text)
+
+    def test_route_dispatches_and_records_shadow_agreement(self):
+        self.set_route_cfg()
+        payload = self.route("修一下这块板子的 DRC",
+                             ["PCB_Agent", "Codex_Agent"],
+                             expected="PCB_Agent")
+        self.assertEqual(payload["agent_id"], "PCB_Agent")
+        self.assertEqual(payload["action"], "dispatch")
+        self.assertEqual(payload["mode"], "shadow")
+        self.assertTrue(payload["agree"])
+        rec = self.ledger.tail(1)[0]
+        self.assertEqual(rec["tool"], "jev_route")
+        self.assertEqual(rec["point"], "agent_route")
+        self.assertEqual(rec["recommended"], "PCB_Agent")
+        self.assertEqual(rec["shadow_expected"], "PCB_Agent")
+        self.assertTrue(rec["agree"])
+        self.assertFalse(rec["enforced"])
+        self.assertAlmostEqual(rec["confidence"], 0.9)
+        self.assertAlmostEqual(rec["margin"], 0.85)
+
+    def test_route_shadow_disagreement_is_recorded(self):
+        self.set_route_cfg()
+        payload = self.route("改一下这个脚本",
+                             ["PCB_Agent", "Codex_Agent"],
+                             expected="Codex_Agent")
+        self.assertEqual(payload["agent_id"], "PCB_Agent")
+        self.assertFalse(payload["agree"])
+        self.assertFalse(self.ledger.tail(1)[0]["agree"])
+
+    def test_route_abstains_when_judge_picks_ask_human(self):
+        self.set_route_cfg(judge="route_last")
+        payload = self.route("帮我看看这个", ["PCB_Agent", "Codex_Agent"])
+        self.assertEqual(payload["action"], "ask_human")
+        self.assertIsNone(payload["agent_id"])
+        self.assertEqual(payload["reason"], "judge_abstained")
+        self.assertIsNone(self.ledger.tail(1)[0]["agree"])
+
+    def test_route_close_call_asks_human(self):
+        self.set_route_cfg(judge="route_close")
+        payload = self.route("这个到底谁做", ["PCB_Agent", "Codex_Agent"])
+        self.assertEqual(payload["action"], "ask_human")
+        self.assertEqual(payload["reason"], "close_call")
+
+    def test_route_low_confidence_asks_human(self):
+        self.set_route_cfg(judge="route_low")
+        payload = self.route("随便弄一下", ["PCB_Agent", "Codex_Agent"])
+        self.assertEqual(payload["action"], "ask_human")
+        self.assertEqual(payload["reason"], "uncertain")
+        self.assertEqual(payload["detail"], "PCB_Agent@0.50")
+        rec = self.ledger.tail(1)[0]
+        self.assertAlmostEqual(rec["confidence"], 0.5)
+        self.assertEqual(rec["detail"], "PCB_Agent@0.50")
+
+    def test_route_dead_judge_is_not_reported_as_uncertain(self):
+        self.set_route_cfg(judge="dead")
+        payload = self.route("写个脚本", ["PCB_Agent", "Codex_Agent"])
+        self.assertEqual(payload["action"], "ask_human")
+        self.assertEqual(payload["reason"], "no_verdict")
+        self.assertNotIn("detail", payload)
+
+    def test_route_active_marks_enforced(self):
+        self.set_route_cfg(mode="active")
+        payload = self.route("写个脚本", ["Codex_Agent", "PCB_Agent"])
+        self.assertEqual(payload["mode"], "active")
+        self.assertEqual(payload["agent_id"], "Codex_Agent")
+        self.assertTrue(self.ledger.tail(1)[0]["enforced"])
+
+    def test_route_single_candidate_skips_the_judge(self):
+        self.set_route_cfg(judge="dead")
+        payload = self.route("只有一个人能做", ["PCB_Agent"])
+        self.assertEqual(payload["agent_id"], "PCB_Agent")
+        self.assertEqual(payload["reason"], "single_candidate")
+
+    def test_route_reserved_option_is_not_a_candidate(self):
+        self.set_route_cfg()
+        payload = self.route("x", ["ask_human", "PCB_Agent", "PCB_Agent"])
+        self.assertEqual(payload["agent_id"], "PCB_Agent")
+        self.assertEqual(self.ledger.tail(1)[0]["candidates"], ["PCB_Agent"])
+
+    def test_route_accepts_a_string_candidate_list(self):
+        self.set_route_cfg()
+        payload = self.route("x", '["PCB_Agent", "Codex_Agent"]')
+        self.assertEqual(payload["agent_id"], "PCB_Agent")
+        self.assertEqual(self.ledger.tail(1)[0]["candidates"],
+                         ["PCB_Agent", "Codex_Agent"])
+
+    def test_route_no_candidates_asks_human(self):
+        self.set_route_cfg(candidates=[])
+        payload = self.route("没人能做")
+        self.assertEqual(payload["action"], "ask_human")
+        self.assertEqual(payload["reason"], "no_candidates")
+
+    def test_route_point_off_skips_judge_and_ledger(self):
+        self.set_route_cfg(mode="off")
+        before = len(self.ledger.tail(1000))
+        payload = self.route("x", ["PCB_Agent", "Codex_Agent"])
+        self.assertEqual(payload["reason"], "point_off")
+        self.assertEqual(len(self.ledger.tail(1000)), before)
+
+    def test_route_uses_configured_roster_when_omitted(self):
+        self.set_route_cfg(candidates=["IPP", "Codex_Agent"])
+        payload = self.route("写一份专利交底书")
+        self.assertEqual(payload["agent_id"], "IPP")
 
     def test_dead_judge_falls_back(self):
         cfg = self.cfg(tiers=["dead"])
