@@ -6,6 +6,11 @@ Reads the kernel ledger, keeps the routing records, and answers the one
 question shadow mode exists for: when the dispatch table chose an agent,
 how often did the router recommend the same one?
 
+The kernel rotates its ledger in a single generation
+(``ledger.jsonl`` -> ``ledger.jsonl.1``), so the report reads the rotated
+generation first and then the live file. Reading only ``ledger.jsonl``
+reported an empty window right after every rotation.
+
     python3 scripts/route_shadow_report.py
     python3 scripts/route_shadow_report.py --ledger /path/to/ledger.jsonl
     python3 scripts/route_shadow_report.py --json
@@ -26,10 +31,23 @@ from pathlib import Path
 from typing import Any
 
 
-def default_ledger() -> Path:
+def data_dir() -> Path:
     override = os.environ.get("JEV_KERNEL_DATA_DIR")
-    base = Path(override) if override else Path.home() / ".qwenpaw" / "plugin-data" / "jev-kernel"
-    return base / "ledger.jsonl"
+    if override:
+        return Path(override)
+    return Path.home() / ".qwenpaw" / "plugin-data" / "jev-kernel"
+
+
+def ledger_paths(base: Path) -> list[Path]:
+    """The rotated generation first, then the live file (oldest first)."""
+    return [base / "ledger.jsonl.1", base / "ledger.jsonl"]
+
+
+def load_all(paths: list[Path]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in paths:
+        rows.extend(load_routes(path))
+    return rows
 
 
 def load_routes(path: Path) -> list[dict[str, Any]]:
@@ -139,15 +157,19 @@ def main(argv: list[str] | None = None) -> int:
         "--ledger",
         type=Path,
         default=None,
-        help="ledger.jsonl path (default: $JEV_KERNEL_DATA_DIR or the QwenPaw plugin-data home)",
+        help=(
+            "read exactly this ledger file (default: both generations under "
+            "$JEV_KERNEL_DATA_DIR or the QwenPaw plugin-data home)"
+        ),
     )
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     args = parser.parse_args(argv)
 
-    path = args.ledger or default_ledger()
-    rows = load_routes(path)
+    paths = [args.ledger] if args.ledger else ledger_paths(data_dir())
+    rows = load_all(paths)
     if not rows:
-        print(f"no jev_route records in {path}", file=sys.stderr)
+        where = ", ".join(str(path) for path in paths)
+        print(f"no jev_route records in {where}", file=sys.stderr)
         return 1
     summary = summarise(rows)
     if args.json:

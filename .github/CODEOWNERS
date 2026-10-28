@@ -1,0 +1,5 @@
+# Default owner for everything in the repo.
+* @CallMeHFK
+
+# CI and release changes are the supply-chain surface: owner review required.
+/.github/workflows/ @CallMeHFK

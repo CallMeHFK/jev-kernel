@@ -11,29 +11,40 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-FALLBACK = "See `docs/CHANGELOG.md` for {tag}."
+FALLBACK = "See `CHANGELOG.md` for {tag}."
+
+_HEADING = re.compile(r"^#{2,3}\s+")
+# Keep a Changelog (`[0.2.4] - 2026-10-28`) and the legacy `v0.2.3` form.
+_VERSION = re.compile(r"^\[?[vV]?(\d+\.\d+\.\d+)\]?(?:\s*-\s*\S+)?\s*$")
+
+
+def _version_of(line: str) -> str | None:
+    match = _HEADING.match(line)
+    if not match:
+        return None
+    version = _VERSION.match(line[match.end():].strip())
+    return version.group(1) if version else None
 
 
 def extract(changelog: Path, tag: str) -> tuple[str, bool]:
     """Return (section text, found).
 
-    The changelog canon is `## vX.Y.Z` (optionally with a date suffix). `###` is
-    accepted too so an older heading level cannot silently fall back to the
-    placeholder note — that mismatch shipped once as a real bug: the changelog
-    said `##`, the extractor looked for `###`, and every release page would have
-    carried the "See docs/CHANGELOG.md" filler instead of the actual notes.
+    Sub-headings (`### Added`, `### Fixed`) belong to the section: only a
+    level-2 heading or another version heading ends it. Treating every
+    `##`-prefixed line as a boundary truncated the notes at the first
+    `### Fixed` — caught by tests/test_release_notes.py.
     """
-    heading = re.compile(rf"^#{{2,3}}\s+{re.escape(tag)}(?:\s|$)")
+    wanted = tag.strip().lstrip("vV")
     try:
         lines = changelog.read_text(encoding="utf-8").splitlines()
     except OSError:
         return FALLBACK.format(tag=tag), False
     for index, line in enumerate(lines):
-        if not heading.match(line):
+        if _version_of(line) != wanted:
             continue
         notes: list[str] = []
         for body in lines[index + 1:]:
-            if body.startswith("##"):
+            if re.match(r"^##\s", body) or _version_of(body) is not None:
                 break
             notes.append(body)
         text = "\n".join(notes).strip()
@@ -45,11 +56,11 @@ def extract(changelog: Path, tag: str) -> tuple[str, bool]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tag", help="release tag, e.g. v1.4.7")
+    parser.add_argument("tag", help="release tag, e.g. v0.2.4")
     parser.add_argument(
         "--changelog",
-        default=str(REPO / "docs" / "CHANGELOG.md"),
-        help="changelog to read (default: docs/CHANGELOG.md)",
+        default=str(REPO / "CHANGELOG.md"),
+        help="changelog to read (default: CHANGELOG.md)",
     )
     args = parser.parse_args()
 

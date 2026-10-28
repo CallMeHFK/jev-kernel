@@ -1,0 +1,29 @@
+name: Feature request
+description: A decision point or capability the kernel should learn to judge.
+title: "feat: "
+labels: ["status: needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Which decision keeps going unjudged, or what does the kernel get wrong today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Keep the question bounded — one typed question with a measurable verdict.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include "solve it in the prompt" and "solve it in agent config" — say why neither is enough.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Sanitized ledger evidence, judge behaviour, or links to related discussions.

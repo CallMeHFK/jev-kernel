@@ -1,0 +1,66 @@
+name: Bug report
+description: The kernel made the wrong call, stalled a tool call, or crashed.
+title: "fix: "
+labels: ["status: needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Replace real judge endpoints, API keys, ledger lines, hosts, and paths
+        with placeholders. Never paste a real `jev.json` here — see
+        CONTRIBUTING.md, "Secrets (strict rule)".
+  - type: input
+    id: version
+    attributes:
+      label: jev-kernel version
+      description: The `version` field of plugin.json.
+      placeholder: "0.2.4"
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host agent
+      description: Host and version, plus the transport (plugin or PreToolUse hook).
+      placeholder: "QwenPaw 2.2.x (plugin) / Claude Code 2.x (hook)"
+    validations:
+      required: true
+  - type: dropdown
+    id: point
+    attributes:
+      label: Affected decision point
+      options:
+        - tool.risk
+        - tool.approval
+        - agent_route
+        - ledger
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode of that point
+      options: [shadow, active, off]
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the sanitized verdict or ledger record you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: Steps, judge transport types and tier order, and the config shape without endpoints or keys.
+    validations:
+      required: true

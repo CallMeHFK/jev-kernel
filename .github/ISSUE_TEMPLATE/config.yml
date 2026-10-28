@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and design discussion
+    url: https://github.com/CallMeHFK/jev-kernel/discussions
+    about: Ask how to configure a point, or discuss a design trade-off.
+  - name: Report a security vulnerability
+    url: https://github.com/CallMeHFK/jev-kernel/security/advisories/new
+    about: Private channel. Never open a public issue for a vulnerability.

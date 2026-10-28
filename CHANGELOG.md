@@ -3,7 +3,36 @@
 Newest first. The release workflow tags `vX.Y.Z` from `plugin.json` and uses
 the matching section below as the release notes.
 
-## v0.2.3
+## [0.2.4] - 2026-10-28
+
+### Fixed
+
+- `scripts/route_shadow_report.py`: the report read only `ledger.jsonl` and
+  returned "no jev_route records" after every rotation, because the ledger
+  rotates in a single generation to `ledger.jsonl.1`. It now reads the rotated
+  generation first and then the live file, so a daily review sees the whole
+  window instead of an empty one. Explicit `--ledger PATH` still reads exactly
+  that one file.
+- `packaging/release_notes.py`: a `### Added` / `### Fixed` sub-heading inside a
+  version section ended the section early, because any line starting with `##`
+  was treated as the next version. Only level-2 headings end a section now.
+
+### Added
+
+- Repository hygiene for public contribution: `CODE_OF_CONDUCT.md`,
+  `SECURITY.md` (private advisory channel, latest-only support table),
+  `.github/CODEOWNERS`, `.github/dependabot.yml`, issue forms with a triage
+  label, and a scheduled `stale` workflow pinned to a commit SHA.
+- `CHANGELOG.md` moved to the repository root and re-headed as
+  `## [X.Y.Z] - YYYY-MM-DD`; `release_notes.py` accepts both this form and the
+  legacy `## vX.Y.Z`.
+
+### Changed
+
+- `ci.yml` declares `permissions: contents: read`; the release workflow now
+  creates an annotated tag.
+
+## [0.2.3] - 2026-10-27
 
 Shadow evidence you can act on, before handing the router live traffic.
 
@@ -31,7 +60,7 @@ Shadow evidence you can act on, before handing the router live traffic.
   labeled cases abstain at p=0.43 / p=0.37, median 120 ms, and `default`
   grabbed no delegated task.
 
-## v0.2.2
+## [0.2.2] - 2026-10-27
 
 Agent routing on the same judgment seam, without touching the QwenPaw kernel.
 
@@ -67,7 +96,7 @@ Agent routing on the same judgment seam, without touching the QwenPaw kernel.
 - Docs: README decision-point table, agent-routing contract, tools list and
   `jev.example.json` updated.
 
-## v0.2.1
+## [0.2.1] - 2026-10-12
 
 Hardening pass over the kernel, the adapter and the docs.
 
@@ -91,7 +120,7 @@ Hardening pass over the kernel, the adapter and the docs.
   always sent to the configured judge and `recordState` only gates the ledger
   copy; `jev.example.json` uses placeholder endpoints only.
 
-## v0.2.0
+## [0.2.0] - 2026-10-09
 
 The kernel learns to live outside QwenPaw: the same two decision points now
 run as a `PreToolUse` hook in ZCode, Qoder, Claude Code and Codex.
@@ -133,7 +162,7 @@ run as a `PreToolUse` hook in ZCode, Qoder, Claude Code and Codex.
   installer's deploy / upgrade / seed / plugin-format / uninstall paths on a
   fake HOME.
 
-## v0.1.0
+## [0.1.0] - 2026-10-09
 
 First public release: a mu-style judgment kernel on QwenPaw's tool seam.
 
