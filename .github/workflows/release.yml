@@ -42,7 +42,10 @@ jobs:
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
             echo "$tag already exists; nothing to release from this push"
           else
-            git tag "$tag" "$GITHUB_SHA"
+            # Annotated, never lightweight: tags are immutable once published,
+            # and the release rules require the peeled `^{}` ref to name this
+            # commit.
+            git tag -a "$tag" -m "$tag" "$GITHUB_SHA"
             git push origin "refs/tags/$tag"
             echo "tag=$tag" >> "$GITHUB_OUTPUT"
           fi

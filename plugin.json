@@ -1,7 +1,7 @@
 {
   "id": "jev-kernel",
   "name": "Jev Judgment Kernel",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "general",
   "description": "A mu-style judgment kernel for QwenPaw: at decision points on the tool seam a small fast judge (jev / TypeSafe System One protocol, any HTTP judge, a raw systemone server such as ollama's decision models, or any OpenAI-compatible chat model) answers one bounded typed question (noul/choice/score) with a calibrated probability. Verdicts cascade through judge tiers, land in a ledger, and in active mode can deny a tool call or escalate it to the human; shadow mode records without enforcing so you can read the ledger before handing a point to a judge. The agent_route point turns the same seam into an agent router: jev_route returns one agent id (or ask_human) and never calls QwenPaw itself, so the orchestrator keeps its own chat_with_agent dispatch. Reference: github.com/qybaihe/mu (docs/judges.md, docs/reference/decision-points.md).",
   "description_i18n": {

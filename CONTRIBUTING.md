@@ -9,6 +9,12 @@ changes that turn the kernel into a general policy engine are usually better
 as a fork, because every new unbounded question is a new way to stall a
 legitimate tool call behind a judge that was never meant to answer it.
 
+## Legal
+
+By submitting a contribution you agree that it is licensed under the project's
+[MIT License](LICENSE), the same as the rest of the codebase. No DCO
+`Signed-off-by` trailer and no CLA are required.
+
 ## Development setup
 
 Prerequisites: Python ≥ 3.10. There are no runtime or test dependencies — the
@@ -83,15 +89,29 @@ worth knowing before you write one:
 - Branch names: `fix/<topic>`, `feat/<topic>`, `docs/<topic>`.
 - Commit messages: imperative summary, body for the *why*. One logical change
   per commit.
-- Bump `version` in `plugin.json` and add a `## vX.Y.Z` section (newest first)
-  to `docs/CHANGELOG.md` in the same PR — pushing that to `main` releases
-  automatically: the workflow tags `vX.Y.Z`, runs the suite, builds the
-  archive and publishes it. Release-hygiene tests fail the release when the
-  changelog section is missing. Pushing a `v*` tag by hand is the manual
-  equivalent.
+- Bump `version` in `plugin.json` and add a `## [X.Y.Z] - YYYY-MM-DD` section
+  (newest first) to `CHANGELOG.md` in the same PR — pushing that to `main` releases
+  automatically: the workflow tags `vX.Y.Z` (annotated), runs the suite, builds
+  the archive and publishes it. The release fails when the changelog section is
+  missing. Pushing a `v*` tag by hand is the manual equivalent.
+- PR titles follow [Conventional Commits](https://www.conventionalcommits.org)
+  (`fix:`, `feat(scope):`, …). The repository squash-merges, so the PR title
+  becomes the commit subject on `main`; the PR body becomes the commit body.
+  Keep one logical change per PR.
 - Use the provided issue and PR templates.
+
+## Code of conduct
+
+All contributions and interactions must follow our
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Do not report vulnerabilities in public issues. Use the private advisory form
+described in [SECURITY.md](SECURITY.md).
 
 ## Where to ask
 
-Open an issue. Design questions ("why does a dead judge fall open in shadow?")
-belong in `docs/DESIGN.md` discussion, not in chat logs.
+Open an issue (or a discussion, when you want a design conversation).
+Design questions ("why does a dead judge fall open in shadow?") belong in
+`docs/DESIGN.md` discussion, not in chat logs.
